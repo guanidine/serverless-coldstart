@@ -20,3 +20,12 @@ def load_checkpoint(checkpoint, model: nn.Module, optimizer: optim.Optimizer, lr
     optimizer.load_state_dict(checkpoint["optimizer"])
     print("=> Loading success")
 
+
+def normalize(data):
+    _range = config.FUNCTION_NUM / 2
+    return (data - _range) / _range
+
+
+def denormalize(data):
+    _range = config.FUNCTION_NUM / 2
+    return data * _range + _range

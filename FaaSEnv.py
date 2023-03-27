@@ -7,20 +7,20 @@ from torch import optim
 import config
 import generator
 from lstm import LSTM
-from utils import load_checkpoint
+from utils import load_checkpoint, normalize
 
 
 class FaaSEnv(gym.Env):
     def __init__(self, max_num=100):
         self.max_num = max_num
 
-        self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=float)
-        self.observation_space = spaces.Box(low=0, high=1, shape=(3, 8), dtype=float)
+        self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=float)
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(3, 8), dtype=float)
 
         self.state = np.zeros((3, 8))
 
         _, self.f = generator.generate()
-        self.f /= config.FUNCTION_NUM
+        self.f = normalize(self.f)
         self.t = 0
 
         self.model = LSTM(device=config.DEVICE).to(config.DEVICE)
@@ -31,28 +31,17 @@ class FaaSEnv(gym.Env):
         self.seed()
 
     def step(self, action):
-        # reward = -(
-        #         (self.f[self.t] - action) * (self.f[self.t] - action)
-        # ).item()
-        query = self.f[self.t].item()
-        action = action.item()
+        query = self.f[self.t].item() + 1
+        action = action.item() + 1
         if query > action * 1.25 or query < action * 0.75:
-            done = True
-            _, self.f = generator.generate()
-            self.f /= config.FUNCTION_NUM
-            self.t = 0
-            reward = -1
-            info = {}
-            return self.state, reward, done, info
+            self.init_data()
+            return self.state, -1, True, {}
         reward = (
                 min(query / (action + 1e-3), 1)  # 0~1
                 - max(query - action, 0) / (query + 1e-3)  # 0~1
         )
-        # print(min(query / (action + 1e-3), 1))
-        # print(max(query - action, 0) / (query + 1e-3))
-        # print('reward', reward)
 
-        self.state[0] = np.append(self.state[0][1:], query)
+        self.state[0] = np.append(self.state[0][1:], query - 1)
         self.state[1] = np.append(self.state[1][1:], self.state[2][0])
         self.state[2][0] = self.model(
             torch.from_numpy(self.state[0].astype(np.float32)).to(config.DEVICE).unsqueeze(0)
@@ -60,9 +49,7 @@ class FaaSEnv(gym.Env):
         self.t += 1
         if self.t == 50:
             done = True
-            _, self.f = generator.generate()
-            self.f /= config.FUNCTION_NUM
-            self.t = 0
+            self.init_data()
         else:
             done = False
         info = {}
@@ -88,6 +75,11 @@ class FaaSEnv(gym.Env):
         self.state[2][0] = self.model(
             torch.from_numpy(self.state[0].astype(np.float32)).to(config.DEVICE).unsqueeze(0)
         ).item()
+
+    def init_data(self):
+        _, self.f = generator.generate()
+        self.f = normalize(self.f)
+        self.t = 0
 
 
 if __name__ == '__main__':
