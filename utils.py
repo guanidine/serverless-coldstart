@@ -18,3 +18,5 @@ def load_checkpoint(checkpoint, model: nn.Module, optimizer: optim.Optimizer, lr
     checkpoint = torch.load(checkpoint, map_location=config.DEVICE)
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
+    print("=> Loading success")
+

@@ -1,4 +1,4 @@
-from stable_baselines3 import DQN
+from stable_baselines3 import DQN, SAC, PPO, TD3
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -8,15 +8,13 @@ if __name__ == '__main__':
     env = FaaSEnv()
     # env = DummyVecEnv([lambda: env])
 
-    model = DQN(
+    model = PPO(
         "MlpPolicy",
         env=env,
         learning_rate=3e-4,
         batch_size=32,
-        buffer_size=256,
-        learning_starts=0,
         gamma=0.99,
-        target_update_interval=50
+        tensorboard_log="./tensorboard/"
     )
     model.learn(total_timesteps=10000)
 

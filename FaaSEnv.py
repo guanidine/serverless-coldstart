@@ -1,48 +1,93 @@
 import gym
+import numpy as np
+import torch
 from gym import spaces
+from torch import optim
 
+import config
 import generator
+from lstm import LSTM
+from utils import load_checkpoint
 
 
 class FaaSEnv(gym.Env):
     def __init__(self, max_num=100):
         self.max_num = max_num
 
-        self.preds = [0] * 8
-        self.reals = [0] * 8
+        self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=float)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(3, 8), dtype=float)
 
-        self.action_space = spaces.Box(low=0, high=self.max_num, shape=(1,), dtype=float)
-        self.observation_space = spaces.Box(low=0, high=self.max_num, shape=(16,), dtype=float)
+        self.state = np.zeros((3, 8))
 
-        t, f = generator.generate()
+        _, self.f = generator.generate()
+        self.f /= config.FUNCTION_NUM
+        self.t = 0
 
-        # self.action_space = spaces.Discrete(5)
-        # self.observation_space = spaces.Discrete(2)
+        self.model = LSTM(device=config.DEVICE).to(config.DEVICE)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=config.LSTM_LEARNING_RATE)
+
+        self.init_obs()
 
         self.seed()
 
     def step(self, action):
-
-        state = 1
-
-        if action == 2:
-            reward = 1
-        else:
+        # reward = -(
+        #         (self.f[self.t] - action) * (self.f[self.t] - action)
+        # ).item()
+        query = self.f[self.t].item()
+        action = action.item()
+        if query > action * 1.25 or query < action * 0.75:
+            done = True
+            _, self.f = generator.generate()
+            self.f /= config.FUNCTION_NUM
+            self.t = 0
             reward = -1
+            info = {}
+            return self.state, reward, done, info
+        reward = (
+                min(query / (action + 1e-3), 1)  # 0~1
+                - max(query - action, 0) / (query + 1e-3)  # 0~1
+        )
+        # print(min(query / (action + 1e-3), 1))
+        # print(max(query - action, 0) / (query + 1e-3))
+        # print('reward', reward)
 
-        done = True
+        self.state[0] = np.append(self.state[0][1:], query)
+        self.state[1] = np.append(self.state[1][1:], self.state[2][0])
+        self.state[2][0] = self.model(
+            torch.from_numpy(self.state[0].astype(np.float32)).to(config.DEVICE).unsqueeze(0)
+        ).item()
+        self.t += 1
+        if self.t == 50:
+            done = True
+            _, self.f = generator.generate()
+            self.f /= config.FUNCTION_NUM
+            self.t = 0
+        else:
+            done = False
         info = {}
-        return state, reward, done, info
+        return self.state, reward, done, info
 
     def reset(self):
-        state = 0
-        return state
+        self.init_obs()
+        return self.state
 
     def render(self, mode='human'):
         pass
 
     def seed(self, seed=None):
         pass
+
+    def init_obs(self):
+        self.state[0] = self.f[:8]
+        self.state[1] = self.f[:8]
+        self.t = 8
+        if not config.HAS_LOAD:
+            load_checkpoint("checkpoint.pth.tar", self.model, self.optimizer, config.LSTM_LEARNING_RATE)
+            config.HAS_LOAD = True
+        self.state[2][0] = self.model(
+            torch.from_numpy(self.state[0].astype(np.float32)).to(config.DEVICE).unsqueeze(0)
+        ).item()
 
 
 if __name__ == '__main__':

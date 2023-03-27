@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import config
+
 
 def generate():
     A0 = 45
@@ -14,7 +16,7 @@ def generate():
     Lambda = 50
     B = 1.3 * (A0 + A1 + A2 + A3 + A4)
     C = 75
-    t = np.linspace(0, 200, 5000)  # 时间范围
+    t = np.linspace(0, config.TIME_RANGE, config.TIME_NUM)  # 时间范围
     f = np.zeros_like(t)
 
     # 叠加波动曲线
