@@ -7,7 +7,7 @@ from torch import optim
 import config
 import generator
 from lstm import LSTM
-from utils import load_checkpoint, normalize
+from utils import load_checkpoint, normalize, cal_reward
 
 
 class FaaSEnv(gym.Env):
@@ -31,22 +31,19 @@ class FaaSEnv(gym.Env):
         self.seed()
 
     def step(self, action):
-        query = self.f[self.t].item() + 1
-        action = action.item() + 1
-        if query > action * 1.25 or query < action * 0.75:
-            self.init_data()
-            return self.state, -1, True, {}
-        reward = (
-                min(query / (action + 1e-3), 1)  # 0~1
-                - max(query - action, 0) / (query + 1e-3)  # 0~1
-        )
-
-        self.state[0] = np.append(self.state[0][1:], query - 1)
+        self.state[0] = np.append(self.state[0][1:], self.f[self.t].item())
         self.state[1] = np.append(self.state[1][1:], self.state[2][0])
         self.state[2][0] = self.model(
             torch.from_numpy(self.state[0].astype(np.float32)).to(config.DEVICE).unsqueeze(0)
         ).item()
         self.t += 1
+
+        reward = cal_reward(self.f[self.t].item(), action.item())
+
+        if reward < 0:
+            self.init_data()
+            return self.state, -1, True, {}
+
         if self.t == 50:
             done = True
             self.init_data()

@@ -29,3 +29,15 @@ def normalize(data):
 def denormalize(data):
     _range = config.FUNCTION_NUM / 2
     return data * _range + _range
+
+
+def cal_reward(query, action):
+    query += 1
+    action += 1
+    if query > action * config.UPPER_SLA or query < action * config.LOWER_SLA:
+        return -1
+    else:
+        return (
+                min(query / (action + 1e-3), 1)
+                - max(query - action, 0) / (query + 1e-3)
+        )
